@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>M-Pesa Payment</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 500px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+        
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            border: 1px solid #e0e0e0;
+        }
+        
+        h2 {
+            color: #2c3e50;
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 28px;
+        }
+        
+        .form-group {
+            margin-bottom: 25px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #34495e;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        input {
+            width: 100%;
+            padding: 14px;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s;
+            background: #f8fafc;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #3498db;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+        }
+        
+        .small-text {
+            font-size: 12px;
+            color: #7f8c8d;
+            margin-top: 5px;
+            display: block;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            padding: 16px;
+            width: 100%;
+            border-radius: 8px;
+            font-size: 17px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+            letter-spacing: 0.5px;
+        }
+        
+        .btn:hover {
+            background: linear-gradient(135deg, #2980b9, #1c5a7e);
+            transform: translateY(-2px);
+            box-shadow: 0 7px 14px rgba(52, 152, 219, 0.2);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .result {
+            margin-top: 25px;
+            padding: 20px;
+            border-radius: 8px;
+            display: none;
+            animation: fadeIn 0.5s;
+        }
+        
+        .success {
+            background: #e8f6ef;
+            color: #27ae60;
+            border: 1px solid #2ecc71;
+        }
+        
+        .error {
+            background: #fdedec;
+            color: #e74c3c;
+            border: 1px solid #e74c3c;
+        }
+        
+        .info {
+            background: #e8f4fc;
+            color: #3498db;
+            border: 1px solid #3498db;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .status-indicator {
+            text-align: center;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+        
+        .sandbox-mode {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .production-mode {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>💳 M-Pesa Payment</h2>
+        
+        <div id="modeIndicator" class="status-indicator sandbox-mode">
+            🔧 Sandbox Mode - Testing Only
+        </div>
+        
+        <div class="form-group">
+            <label for="phone">Phone Number</label>
+            <input type="tel" id="phone" placeholder="2547XXXXXXXX" value="254708374149">
+            <span class="small-text">Enter phone number to receive payment prompt</span>
+        </div>
+        
+        <div class="form-group">
+            <label for="amount">Amount (Ksh)</label>
+            <input type="number" id="amount" placeholder="100" value="1" min="1">
+            <span class="small-text">Minimum amount: 1 Ksh</span>
+        </div>
+        
+        <div class="form-group">
+            <label for="reference">Reference (Optional)</label>
+            <input type="text" id="reference" placeholder="Payment reference">
+            <span class="small-text">Appears on your statement</span>
+        </div>
+        
+        <button class="btn" onclick="sendPayment()">
+            <span style="margin-right: 8px;">📱</span>
+            Send Payment Request
+        </button>
+        
+        <div id="result" class="result"></div>
+        
+        <!-- Removed Payment Flow section -->
+    </div>
+
+    <script>
+        // Check current mode
+        async function checkMode() {
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+                
+                const modeDiv = document.getElementById('modeIndicator');
+                
+                if (data.mode === 'SANDBOX') {
+                    modeDiv.className = 'status-indicator sandbox-mode';
+                    modeDiv.innerHTML = '🔧 Sandbox Mode - Testing Only';
+                } else {
+                    modeDiv.className = 'status-indicator production-mode';
+                    modeDiv.innerHTML = '🚀 Production Mode - Real Money';
+                }
+                
+            } catch (error) {
+                console.log('Mode check failed');
+            }
+        }
+        
+        async function sendPayment() {
+            const phone = document.getElementById('phone').value;
+            const amount = document.getElementById('amount').value;
+            const reference = document.getElementById('reference').value;
+            const resultDiv = document.getElementById('result');
+            
+            // Clear previous result
+            resultDiv.innerHTML = '';
+            resultDiv.className = '';
+            resultDiv.style.display = 'none';
+            
+            // Validation
+            if (!phone || !amount) {
+                showMessage('Please enter phone number and amount', 'error');
+                return;
+            }
+            
+            if (amount < 1) {
+                showMessage('Amount must be at least 1 Ksh', 'error');
+                return;
+            }
+            
+            // Show loading
+            showMessage('Sending payment request...', 'info');
+            
+            try {
+                const response = await fetch('/stkpush', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        phone: phone,
+                        amount: amount,
+                        reference: reference
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage(`
+                        <div style="text-align: center; margin-bottom: 15px;">
+                            <div style="font-size: 48px; color: #27ae60;">✅</div>
+                            <h3 style="margin: 10px 0; color: #27ae60;">Payment Request Sent</h3>
+                        </div>
+                        
+                        <div style="background: white; padding: 15px; border-radius: 8px; margin: 15px 0; border: 1px solid #e0e0e0;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                <span style="color: #7f8c8d;">Phone:</span>
+                                <span style="font-weight: 600;">${data.data.phone}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                <span style="color: #7f8c8d;">Amount:</span>
+                                <span style="font-weight: 600; color: #e74c3c;">${data.data.amount}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                <span style="color: #7f8c8d;">Reference:</span>
+                                <span style="font-weight: 600;">${data.data.reference || 'Not specified'}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: #7f8c8d;">Status:</span>
+                                <span style="font-weight: 600; color: #27ae60;">Request Sent</span>
+                            </div>
+                        </div>
+                        
+                        <p style="text-align: center; color: #7f8c8d; font-size: 14px; margin-top: 15px;">
+                            ${data.data.note}
+                        </p>
+                    `, 'success');
+                    
+                    // Auto-clear form after success
+                    setTimeout(() => {
+                        document.getElementById('reference').value = '';
+                        document.getElementById('amount').value = '1';
+                    }, 3000);
+                    
+                } else {
+                    showMessage(`
+                        <div style="text-align: center; margin-bottom: 15px;">
+                            <div style="font-size: 48px; color: #e74c3c;">❌</div>
+                            <h3 style="margin: 10px 0; color: #e74c3c;">Payment Failed</h3>
+                        </div>
+                        
+                        <div style="background: white; padding: 15px; border-radius: 8px; margin: 15px 0; border: 1px solid #f5c6cb;">
+                            <p style="color: #721c24; margin: 0;">
+                                <strong>Error:</strong> ${data.error || 'Unknown error'}
+                            </p>
+                            ${data.details ? `<p style="color: #721c24; margin-top: 10px;">${data.details}</p>` : ''}
+                        </div>
+                    `, 'error');
+                }
+                
+            } catch (error) {
+                showMessage(`
+                    <div style="text-align: center; margin-bottom: 15px;">
+                        <div style="font-size: 48px; color: #e74c3c;">⚠️</div>
+                        <h3 style="margin: 10px 0; color: #e74c3c;">Connection Error</h3>
+                    </div>
+                    
+                    <div style="background: white; padding: 15px; border-radius: 8px; margin: 15px 0; border: 1px solid #f5c6cb;">
+                        <p style="color: #721c24; margin: 0;">
+                            Unable to connect to payment server.
+                        </p>
+                        <p style="color: #721c24; margin-top: 10px; font-size: 14px;">
+                            Please check if the server is running and try again.
+                        </p>
+                    </div>
+                `, 'error');
+                console.error('Payment Error:', error);
+            }
+        }
+        
+        function showMessage(message, type) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = message;
+            resultDiv.className = type;
+            resultDiv.style.display = 'block';
+            
+            // Scroll to result smoothly
+            resultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        
+        // Auto-format phone number
+        document.getElementById('phone').addEventListener('blur', function() {
+            let phone = this.value.replace(/\D/g, '');
+            if (phone.startsWith('0') && phone.length === 10) {
+                phone = '254' + phone.substring(1);
+                this.value = phone;
+            }
+        });
+        
+        // Check mode on load
+        window.addEventListener('load', checkMode);
+        
+        // Enter key submits form
+        document.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendPayment();
+            }
+        });
+    </script>
+</body>
+</html>
