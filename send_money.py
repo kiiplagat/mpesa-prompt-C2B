@@ -1,14 +1,3 @@
-"""
-==================================================
-M-PESA C2B (CUSTOMER TO BUSINESS) INTEGRATION
-Complete Python Implementation with Django/FastAPI
-==================================================
-Author: Your Name
-Version: 3.0.0
-License: MIT
-Documentation: https://github.com/yourusername/mpesa-c2b-python
-==================================================
-"""
 
 import os
 import sys
