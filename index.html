@@ -147,7 +147,7 @@
         
         <div class="form-group">
             <label for="phone">Phone Number</label>
-            <input type="tel" id="phone" placeholder="2547XXXXXXXX" value="254708374149">
+            <input type="tel" id="phone" placeholder="2547XXXXXXXX" value="25471234567">
             <span class="small-text">Enter phone number to receive payment prompt</span>
         </div>
         
@@ -164,7 +164,7 @@
         </div>
         
         <button class="btn" onclick="sendPayment()">
-            <span style="margin-right: 8px;">📱</span>
+            <span style="margin-right: 8px;"></span>
             Send Payment Request
         </button>
         
@@ -184,10 +184,10 @@
                 
                 if (data.mode === 'SANDBOX') {
                     modeDiv.className = 'status-indicator sandbox-mode';
-                    modeDiv.innerHTML = '🔧 Sandbox Mode - Testing Only';
+                    modeDiv.innerHTML = ' Sandbox Mode - Testing Only';
                 } else {
                     modeDiv.className = 'status-indicator production-mode';
-                    modeDiv.innerHTML = '🚀 Production Mode - Real Money';
+                    modeDiv.innerHTML = ' Production Mode - Real Money';
                 }
                 
             } catch (error) {
@@ -239,7 +239,7 @@
                 if (data.success) {
                     showMessage(`
                         <div style="text-align: center; margin-bottom: 15px;">
-                            <div style="font-size: 48px; color: #27ae60;">✅</div>
+                            <div style="font-size: 48px; color: #27ae60;"></div>
                             <h3 style="margin: 10px 0; color: #27ae60;">Payment Request Sent</h3>
                         </div>
                         
@@ -276,7 +276,7 @@
                 } else {
                     showMessage(`
                         <div style="text-align: center; margin-bottom: 15px;">
-                            <div style="font-size: 48px; color: #e74c3c;">❌</div>
+                            <div style="font-size: 48px; color: #e74c3c;"></div>
                             <h3 style="margin: 10px 0; color: #e74c3c;">Payment Failed</h3>
                         </div>
                         
@@ -292,7 +292,7 @@
             } catch (error) {
                 showMessage(`
                     <div style="text-align: center; margin-bottom: 15px;">
-                        <div style="font-size: 48px; color: #e74c3c;">⚠️</div>
+                        <div style="font-size: 48px; color: #e74c3c;"></div>
                         <h3 style="margin: 10px 0; color: #e74c3c;">Connection Error</h3>
                     </div>
                     
