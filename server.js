@@ -23,12 +23,16 @@ app.get('/', (req, res) => {
 const payLimiter = rateLimit({ windowMs: 60 * 1000, max: 5 });
 
 app.get('/health', (req, res) => {
-    res.json({ status: 'OK', time: new Date().toISOString() });
+    res.json({
+        status: 'OK',
+        mode: BASE_URL.includes('sandbox') ? 'SANDBOX' : 'PRODUCTION',
+        time: new Date().toISOString()
+    });
 });
 
-app.post('/pay-to-business', payLimiter, async (req, res) => {
+app.post('/stkpush', payLimiter, async (req, res) => {
     try {
-        const { customerPhone, amount, accountNumber } = req.body;
+        const { phone: customerPhone, amount, reference: accountNumber } = req.body;
 
         if (!customerPhone || !amount) {
             return res.json({ success: false, error: 'Phone and amount required' });
@@ -58,7 +62,7 @@ app.post('/pay-to-business', payLimiter, async (req, res) => {
         const timestamp = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
         const password = Buffer.from(SHORTCODE + PASSKEY + timestamp).toString('base64');
 
-        const response = await axios.post(
+        await axios.post(
             `${BASE_URL}/mpesa/stkpush/v1/processrequest`,
             {
                 BusinessShortCode: SHORTCODE,
@@ -78,11 +82,11 @@ app.post('/pay-to-business', payLimiter, async (req, res) => {
 
         res.json({
             success: true,
-            message: 'STK Push sent successfully!',
-            details: {
+            data: {
+                phone: phone,
                 amount: `${amt} Ksh`,
-                account: accountNumber,
-                checkoutId: response.data.CheckoutRequestID
+                reference: accountNumber || '',
+                note: 'Check your phone and enter your M-Pesa PIN.'
             }
         });
     } catch (error) {
