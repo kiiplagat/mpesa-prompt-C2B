@@ -125,33 +125,11 @@
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
-
-        .status-indicator {
-            text-align: center;
-            padding: 10px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            font-weight: 500;
-        }
-
-        .sandbox-mode {
-            background: #fff3cd;
-            color: #856404;
-            border: 1px solid #ffeaa7;
-        }
-
-        .production-mode {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
     </style>
 </head>
 <body>
     <div class="container">
         <h2>&#128179; M-Pesa Payment</h2>
-
-        <div id="modeIndicator"></div>
 
         <div class="form-group">
             <label for="phone">Phone Number</label>
@@ -179,25 +157,6 @@
     </div>
 
     <script>
-        // Show sandbox / production banner
-        async function checkMode() {
-            const modeDiv = document.getElementById('modeIndicator');
-            if (!modeDiv) return;
-            try {
-                const response = await fetch('/health');
-                const data = await response.json();
-
-                if (data.mode === 'SANDBOX') {
-                    modeDiv.className = 'status-indicator sandbox-mode';
-                } else if (data.mode === 'PRODUCTION') {
-                    modeDiv.className = 'status-indicator production-mode';
-                    modeDiv.textContent = 'Production Mode - Real Money';
-                }
-            } catch (error) {
-                console.log('Mode check failed');
-            }
-        }
-
         async function sendPayment() {
             const phone = document.getElementById('phone').value;
             const amount = document.getElementById('amount').value;
@@ -335,9 +294,6 @@
                 this.value = phone;
             }
         });
-
-        // Check mode on load
-        window.addEventListener('load', checkMode);
     </script>
 </body>
 </html>
