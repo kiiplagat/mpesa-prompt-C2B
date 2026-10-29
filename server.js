@@ -1,143 +1,134 @@
 const express = require('express');
 const axios = require('axios');
+const path = require('path');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
-// Middleware
+const BASE_URL = process.env.MPESA_BASE_URL || 'https://sandbox.safaricom.co.ke';
+const SHORTCODE = process.env.MPESA_SHORTCODE || '174379';
+const PASSKEY = process.env.MPESA_PASSKEY;
+const CALLBACK_URL = process.env.CALLBACK_URL;
+
 app.use(express.json());
-app.use(express.static('.'));
 
-// Health check
-app.get('/health', (req, res) => {
-    res.json({ 
-        status: 'OK', 
-        server: 'M-Pesa Business Payments',
-        time: new Date().toISOString()
-    });
+// Serve only the page, not the whole project folder
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Pay to Business endpoint (what your HTML is calling)
-app.post('/pay-to-business', async (req, res) => {
-    console.log('💼 Business Payment Request:', req.body);
-    
+// Limit payment requests: 5 per minute per IP
+const payLimiter = rateLimit({ windowMs: 60 * 1000, max: 5 });
+
+app.get('/health', (req, res) => {
+    res.json({ status: 'OK', time: new Date().toISOString() });
+});
+
+app.post('/pay-to-business', payLimiter, async (req, res) => {
     try {
         const { customerPhone, amount, accountNumber } = req.body;
-        
+
         if (!customerPhone || !amount) {
-            return res.json({
-                success: false,
-                error: 'Phone and amount required'
-            });
+            return res.json({ success: false, error: 'Phone and amount required' });
         }
-        
-        // Format phone
-        let phone = customerPhone.replace(/\D/g, '');
+
+        const amt = Number(amount);
+        if (!Number.isInteger(amt) || amt < 1 || amt > 150000) {
+            return res.json({ success: false, error: 'Invalid amount' });
+        }
+
+        // Format phone to 2547XXXXXXXX
+        let phone = String(customerPhone).replace(/\D/g, '');
         if (phone.startsWith('0') && phone.length === 10) {
             phone = '254' + phone.substring(1);
+        } else if (phone.length === 9) {
+            phone = '254' + phone;
         }
-        
-        console.log(`📱 ${phone} paying ${amount} Ksh, Account: ${accountNumber}`);
-        
-        // Get M-Pesa token
+        if (!/^254\d{9}$/.test(phone)) {
+            return res.json({ success: false, error: 'Invalid phone number' });
+        }
+
         const token = await getToken();
         if (!token) {
-            return res.json({
-                success: false,
-                error: 'M-Pesa authentication failed. Check .env credentials.'
-            });
+            return res.json({ success: false, error: 'M-Pesa authentication failed' });
         }
-        
-        // Prepare STK request
-        const timestamp = new Date().toISOString()
-            .replace(/[-:T.Z]/g, '')
-            .slice(0, 14);
-        
-        const shortcode = "174379"; // Sandbox
-        const passkey = "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919";
-        const password = Buffer.from(shortcode + passkey + timestamp).toString('base64');
-        
-        const requestData = {
-            BusinessShortCode: shortcode,
-            Password: password,
-            Timestamp: timestamp,
-            TransactionType: "CustomerPayBillOnline",
-            Amount: amount,
-            PartyA: phone,
-            PartyB: shortcode,
-            PhoneNumber: phone,
-            CallBackURL: "https://webhook.site",
-            AccountReference: accountNumber || "Payment",
-            TransactionDesc: "Business Payment"
-        };
-        
-        console.log('📤 Sending to M-Pesa...');
-        
+
+        const timestamp = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
+        const password = Buffer.from(SHORTCODE + PASSKEY + timestamp).toString('base64');
+
         const response = await axios.post(
-            'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest',
-            requestData,
+            `${BASE_URL}/mpesa/stkpush/v1/processrequest`,
             {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            }
+                BusinessShortCode: SHORTCODE,
+                Password: password,
+                Timestamp: timestamp,
+                TransactionType: 'CustomerPayBillOnline',
+                Amount: amt,
+                PartyA: phone,
+                PartyB: SHORTCODE,
+                PhoneNumber: phone,
+                CallBackURL: CALLBACK_URL,
+                AccountReference: accountNumber || 'Payment',
+                TransactionDesc: 'Business Payment'
+            },
+            { headers: { Authorization: `Bearer ${token}` } }
         );
-        
-        console.log('✅ M-Pesa Response:', response.data.ResponseDescription);
-        
+
         res.json({
             success: true,
             message: 'STK Push sent successfully!',
             details: {
-                from: customerPhone,
-                to: 'Business Account',
-                amount: `${amount} Ksh`,
+                amount: `${amt} Ksh`,
                 account: accountNumber,
-                checkoutId: response.data.CheckoutRequestID,
-                note: phone === '254708374149' 
-                    ? 'Check Sandbox dashboard (PIN: 174379)'
-                    : 'STK sent to phone'
+                checkoutId: response.data.CheckoutRequestID
             }
         });
-        
     } catch (error) {
-        console.error('❌ Payment Error:', error.response?.data || error.message);
+        console.error('Payment error:', error.response?.data || error.message);
         res.json({
             success: false,
-            error: error.response?.data?.errorMessage || error.message,
-            message: 'Payment failed. Check credentials and try again.'
+            error: error.response?.data?.errorMessage || error.message
         });
     }
 });
 
-// Get M-Pesa token
+// Safaricom posts the payment result here
+app.post('/callback', (req, res) => {
+    const cb = req.body?.Body?.stkCallback;
+    if (cb) {
+        if (cb.ResultCode === 0) {
+            const items = cb.CallbackMetadata?.Item || [];
+            const get = (name) => items.find((i) => i.Name === name)?.Value;
+            console.log('PAID:', {
+                checkoutId: cb.CheckoutRequestID,
+                receipt: get('MpesaReceiptNumber'),
+                amount: get('Amount'),
+                phone: get('PhoneNumber')
+            });
+            // TODO: save to a database
+        } else {
+            console.log('FAILED/CANCELLED:', cb.CheckoutRequestID, cb.ResultDesc);
+        }
+    }
+    res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
+});
+
 async function getToken() {
     try {
-        const auth = Buffer.from(`${process.env.MPESA_CONSUMER_KEY}:${process.env.MPESA_CONSUMER_SECRET}`).toString('base64');
-        
+        const auth = Buffer.from(
+            `${process.env.MPESA_CONSUMER_KEY}:${process.env.MPESA_CONSUMER_SECRET}`
+        ).toString('base64');
         const response = await axios.get(
-            'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials',
-            { headers: { 'Authorization': `Basic ${auth}` } }
+            `${BASE_URL}/oauth/v1/generate?grant_type=client_credentials`,
+            { headers: { Authorization: `Basic ${auth}` } }
         );
-        
         return response.data.access_token;
     } catch (error) {
-        console.log('❌ Token Error:', error.message);
+        console.error('Token error:', error.message);
         return null;
     }
 }
 
-// Start server
-app.listen(PORT, () => {
-    console.log(`
-🏢 ===== BUSINESS PAYMENT SERVER ===== 🏢
-✅ Server: http://localhost:${PORT}
-📞 Endpoint: POST /pay-to-business
-🔧 Mode: SANDBOX
-📱 Test phone: 254708374149
-🔑 PIN: 174379 (in sandbox dashboard)
-🏢 =================================== 🏢
-    `);
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
